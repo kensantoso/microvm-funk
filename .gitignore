@@ -1,0 +1,8 @@
+# build/ holds generated artifacts only (binaries, staged Dockerfile, zip)
+/build/
+/terraform/.terraform
+/terraform/terraform.tfstate
+/terraform/terraform.tfstate.backup
+# Dedicated MicroVM SSH private key (regenerate with: ssh-keygen -t ed25519 -f ssh/microvm_ed25519)
+/ssh/microvm_ed25519
+.idea/

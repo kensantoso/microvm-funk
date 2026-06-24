@@ -1,0 +1,31 @@
+#!/bin/sh
+# Single entrypoint (CMD) for BOTH images. The role is baked at image-build time
+# as the image-level env var $ROLE (see build.sh: --environment-variables), so the
+# two images differ only by that variable — no run hook, no per-VM payload.
+#
+#   ROLE=controlplane -> base-prep + k3s server
+#   ROLE=node         -> base-prep, then idle until up.sh pushes node-join (/exec)
+#
+# executor runs in the foreground as the always-up app on :8080 (serves /exec).
+TOKEN="${CLUSTER_TOKEN:-microvm-k3s-shared-token}"   # shared join secret (baked)
+
+/usr/local/bin/base-prep
+
+case "${ROLE:-node}" in
+controlplane)
+  setsid k3s server --data-dir=/tmp/k3s \
+    --write-kubeconfig=/tmp/kubeconfig --write-kubeconfig-mode=644 \
+    --tls-san=127.0.0.1 --tls-san=::1 --token="$TOKEN" \
+    --disable-agent --flannel-backend=host-gw \
+    --disable=traefik,servicelb,metrics-server,coredns,local-storage \
+    --disable-network-policy </dev/null >/tmp/k3s.log 2>&1 &
+  ;;
+node)
+  # Can't join until up.sh supplies the cp's runtime coordinates over /exec
+  # (CP_ID=... CP_IP6=... NAME=... node-join). Nothing to start here.
+  : ;;
+*)
+  echo "start: unknown ROLE='$ROLE' (want controlplane|node)" >&2 ;;
+esac
+
+exec /app/executor

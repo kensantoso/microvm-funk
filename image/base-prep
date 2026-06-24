@@ -1,0 +1,18 @@
+#!/bin/sh
+# Common base bring-up baked into every node image. Idempotent; returns quickly.
+#  - /dev/kmsg FIFO shim: the real device returns EPERM even with ALL caps, and
+#    k3s/containerd write to it. A FIFO with a reader keeps writers from blocking.
+#  - cgroup-v2 delegation: move boot processes into a child cgroup so controllers
+#    can be enabled in the root subtree_control (k3s/kubelet require this).
+#  - microtunnel: the /tunnel WebSocket server on :8081 (used by tundial for the
+#    node->apiserver tunnel and laptop->pod access).
+[ -p /dev/kmsg ] || { rm -f /dev/kmsg; mkfifo /dev/kmsg; }
+setsid sh -c 'exec 3<>/dev/kmsg; exec sleep 100000' >/dev/null 2>&1 &
+
+mkdir -p /sys/fs/cgroup/init
+for pid in $(cat /sys/fs/cgroup/cgroup.procs 2>/dev/null); do
+  echo "$pid" > /sys/fs/cgroup/init/cgroup.procs 2>/dev/null || true
+done
+echo '+cpuset +cpu +io +memory +pids' > /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null || true
+
+setsid /usr/local/bin/microtunnel </dev/null >/tmp/microtunnel.log 2>&1 &

@@ -1,0 +1,20 @@
+#!/bin/sh
+# Join this worker to the control plane. Invoked by up.sh over /exec once the
+# control plane's runtime coordinates are known:
+#   CP_ID=<cp-microvm-id> CP_IP6=<cp-global-ipv6> NAME=<node-name> node-join
+# Opens a tunnel to the apiserver (6443) through the cp's microtunnel, then starts the
+# k3s agent pointed at that tunnel. Returns immediately (k3s runs detached).
+TOKEN="${CLUSTER_TOKEN:-microvm-k3s-shared-token}"   # shared join secret (baked)
+: "${CP_ID:?need CP_ID}" "${CP_IP6:?need CP_IP6}" "${NAME:?need NAME}"
+
+# Bind the cp's global IPv6 locally so the apiserver tunnel can listen on it.
+ip -6 addr add "${CP_IP6}/128" dev lo 2>/dev/null || true
+
+setsid /usr/local/bin/tundial -microvm-id "$CP_ID" -agent-port 8081 \
+  -target-port 6443 -listen "[${CP_IP6}]:6443" </dev/null >/tmp/tundial.log 2>&1 &
+sleep 2
+
+setsid k3s agent --server "https://[${CP_IP6}]:6443" --token "$TOKEN" \
+  --data-dir=/tmp/k3s --node-name="$NAME" </dev/null >/tmp/k3s-agent.log 2>&1 &
+
+echo "node-join: started (cp=$CP_ID name=$NAME)"
