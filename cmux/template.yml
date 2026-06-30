@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  ImageName:
+    Type: String
+    Default: microvm-shell
+  CodeArtifactKey:
+    Type: String
+    Default: ""
+
+Conditions:
+  HaveCodeArtifact: !Not [!Equals [!Ref CodeArtifactKey, ""]]
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${ImageName}-artifacts-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ImageName}-build
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: read-artifact-bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${ArtifactBucket.Arn}/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt ArtifactBucket.Arn
+
+  ExecRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ImageName}-exec
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: cloudwatch-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  ShellImage:
+    Type: AWS::Lambda::MicrovmImage
+    Condition: HaveCodeArtifact
+    Properties:
+      Name: !Ref ImageName
+      BaseImageArn: !Sub arn:aws:lambda:${AWS::Region}:aws:microvm-image:al2023-1
+      BaseImageVersion: "0"
+      BuildRoleArn: !GetAtt BuildRole.Arn
+      CodeArtifact:
+        Uri: !Sub s3://${ArtifactBucket}/${CodeArtifactKey}
+      AdditionalOsCapabilities: [ALL]
+      CpuConfigurations: [{ Architecture: ARM_64 }]
+      EgressNetworkConnectors:
+        - !Sub arn:aws:lambda:${AWS::Region}:aws:network-connector:aws-network-connector:INTERNET_EGRESS
+      Resources: [{ MinimumMemoryInMiB: 2048 }]
+      EnvironmentVariables: []
+      Hooks: {}
+      Logging:
+        Disabled: true
+
+Outputs:
+  ArtifactBucket:
+    Value: !Ref ArtifactBucket
+  ExecRoleArn:
+    Value: !GetAtt ExecRole.Arn
+  ImageArn:
+    Condition: HaveCodeArtifact
+    Value: !GetAtt ShellImage.ImageArn

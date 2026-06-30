@@ -1,0 +1,47 @@
+{
+  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
+  "schemaVersion": 1,
+
+  "commands": [
+    {
+      "name": "microvm.workspace",
+      "description": "Disposable Lambda MicroVM session",
+      "workspace": {
+        "name": "MicroVM",
+        "color": "#a78bfa",
+        "layout": {
+          "pane": {
+            "surfaces": [
+              {
+                "type": "terminal",
+                "command": "exec /path/to/launch-microvm.sh"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+
+  "actions": {
+    "microvm.new": {
+      "type": "workspaceCommand",
+      "commandName": "microvm.workspace",
+      "title": "New disposable MicroVM",
+      "subtitle": "Launches a Lambda MicroVM in a new workspace (~30s)",
+      "shortcut": "cmd+shift+i",
+      "icon": { "type": "emoji", "value": "⚡" }
+    }
+  },
+
+  "ui": {
+    "newWorkspace": {
+      "contextMenu": [
+        "cmux.newWorkspace",
+        "cmux.cloudvm",
+        "-",
+        "microvm.new"
+      ]
+    }
+  }
+}
